@@ -115,6 +115,71 @@ public class Intersection<S extends Summary> {
   }
 
   /**
+   * Updates the internal set by intersecting it with the given Theta sketch.  When encountering
+   * duplicates, the current summary for that key will be combined with the default theta summary provided.
+   * @param sketchIn input theta sketch to add to the internal set
+   * @param summary Context-specific summary that represents an item in the theta sketch.
+   *                This may be dynamic or an empty summary provided by the appropriate
+   *                summary factory.
+   */
+  @SuppressWarnings({ "unchecked", "null" })
+  public void update(final org.apache.datasketches.theta.Sketch sketchIn, final S summary) {
+    final boolean isFirstCall = isFirstCall_;
+    isFirstCall_ = false;
+    if (sketchIn == null) {
+      isEmpty_ = true;
+      sketch_ = null;
+      return;
+    }
+    theta_ = min(theta_, sketchIn.getThetaLong());
+    isEmpty_ |= sketchIn.isEmpty();
+    if (isEmpty_ || (sketchIn.getRetainedEntries() == 0)) {
+      sketch_ = null;
+      return;
+    }
+    // assumes that constructor of QuickSelectSketch bumps the requested size up to the nearest power of 2
+    if (isFirstCall) {
+      sketch_ = new QuickSelectSketch<>(sketchIn.getRetainedEntries(), ResizeFactor.X1.lg(), null);
+      final org.apache.datasketches.theta.HashIterator it = sketchIn.iterator();
+      while (it.next()) {
+        sketch_.insert(it.get(), (S)summary.copy());
+      }
+    } else {
+      if (sketch_ == null) {
+        return;
+      }
+      final int matchSize = min(sketch_.getRetainedEntries(), sketchIn.getRetainedEntries());
+      final long[] matchKeys = new long[matchSize];
+      S[] matchSummaries = null;
+      int matchCount = 0;
+      final org.apache.datasketches.theta.HashIterator it = sketchIn.iterator();
+      while (it.next()) {
+        final S existingSummary = sketch_.find(it.get());
+        if (existingSummary != null) {
+          matchKeys[matchCount] = it.get();
+          if (matchSummaries == null) {
+            matchSummaries = (S[]) Array.newInstance(existingSummary.getClass(), matchSize);
+          }
+          matchSummaries[matchCount] =
+              summarySetOps_.intersection(existingSummary, (S)summary.copy());
+          matchCount++;
+        }
+      }
+      sketch_ = null;
+      if (matchCount > 0) {
+        sketch_ = new QuickSelectSketch<>(matchCount, ResizeFactor.X1.lg(), null);
+        for (int i = 0; i < matchCount; i++) {
+          sketch_.insert(matchKeys[i], matchSummaries[i]);
+        }
+      }
+    }
+    if (sketch_ != null) {
+      sketch_.setThetaLong(theta_);
+      sketch_.setNotEmpty();
+    }
+  }
+
+  /**
    * Gets the internal set as a CompactSketch
    * @return result of the intersections so far
    */

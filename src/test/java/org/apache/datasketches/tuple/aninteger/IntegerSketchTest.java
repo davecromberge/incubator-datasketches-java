@@ -70,6 +70,28 @@ public class IntegerSketchTest {
   }
 
   @Test
+  public void intersectTestThetaSketch() {
+    int lgK = 12;
+    int K = 1 << lgK;
+    IntegerSummary.Mode a1Mode = IntegerSummary.Mode.AlwaysOne;
+    IntegerSketch a1Sk1 = new IntegerSketch(lgK, a1Mode);
+    org.apache.datasketches.theta.UpdateSketch a1Sk2 =
+            new org.apache.datasketches.theta.UpdateSketchBuilder().setLogNominalEntries(lgK).build();
+    int m = 2 * K;
+    for (int key = 0; key < m; key++) {
+      a1Sk1.update(key, 1);
+      a1Sk2.update(key + (m/2));
+    }
+    IntegerSummary defaultSummary = new IntegerSummaryFactory(a1Mode).newSummary();
+    Intersection<IntegerSummary> inter =
+            new Intersection<>(new IntegerSummarySetOperations(a1Mode, a1Mode));
+    inter.update(a1Sk1);
+    inter.update(a1Sk2, defaultSummary);
+    CompactSketch<IntegerSummary> csk = inter.getResult();
+    assertEquals(csk.getEstimate(), K * 1.0, K * .03);
+  }
+
+  @Test
   public void checkMinMaxMode() {
     int lgK = 12;
     int K = 1 << lgK;

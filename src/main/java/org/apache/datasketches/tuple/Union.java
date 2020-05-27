@@ -78,6 +78,29 @@ public class Union<S extends Summary> {
   }
 
   /**
+   * Updates the internal set by adding entries from the given Theta sketch.  When encountering
+   * duplicates, the current summary for that key will be combined with the default theta summary provided.
+   * @param sketchIn input theta sketch to add to the internal set
+   * @param summary Context-specific summary that represents an item in the theta sketch.
+   *                This may be dynamic or an empty summary provided by the appropriate
+   *                summary factory.
+   */
+  @SuppressWarnings("unchecked")
+  public void update(final org.apache.datasketches.theta.Sketch sketchIn, final S summary) {
+    if ((sketchIn == null) || sketchIn.isEmpty()) { return; }
+    isEmpty_ = false;
+    if (sketchIn.getThetaLong() < theta_) { theta_ = sketchIn.getThetaLong(); }
+    final org.apache.datasketches.theta.HashIterator it = sketchIn.iterator();
+    S thetaSketchSummary = (S)summary.copy();
+    while (it.next()) {
+      sketch_.merge(it.get(), thetaSketchSummary, summarySetOps_);
+    }
+    if (sketch_.theta_ < theta_) {
+      theta_ = sketch_.theta_;
+    }
+  }
+
+  /**
    * Gets the internal set as a CompactSketch
    * @return result of the unions so far
    */
